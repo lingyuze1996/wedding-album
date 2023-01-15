@@ -1,0 +1,40 @@
+name: Deploy to AWS Cloud
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  DeployToDevelopment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build files
+        run: CI=false NODE_OPTIONS=--max_old_space_size=4096 npm run build --if-present
+
+      - name: Configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.S3_DEPLOYMENT_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync build files to S3
+        run: aws s3 sync build/ s3://${{ secrets.S3_BUCKET }}/
+
+      - name: Invalidate cache in CloudFront
+        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION }} --paths "/*"
